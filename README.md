@@ -11,17 +11,7 @@ them all.
 It was built for terminals inside Emacs, and it works from **vterm's copy
 mode**: there is no need to toggle in and out of copy mode for every note.
 
-```
- ┌ *vterm* (copy mode) ──────────────────────────────┐
- │ ● The migration fails because the lock table is  │
- │   held by the old deploy. Two options:            │
- │   1. Kill the stale session ...   ◀── cursor here │
- │   2. Wait for the timeout ...                     │
- ├ jot.md ───────────────────────────────────────────┤
- │ > 1. Kill the stale session ...                   │
- │ is this safe in prod? which session id?█          │
- └───────────────────────────────────────────────────┘
-```
+![jot demo: quoting lines from vterm copy mode into the notepad, then pasting every note at the prompt](demo/jot.gif)
 
 ## How it works
 
@@ -109,6 +99,7 @@ make compile     # byte-compile, warnings are errors
 make lint        # checkdoc + package-lint
 make test        # ERT suite
 make test-vterm  # the suite plus a real vterm test, using your installed vterm
+make demo        # re-record demo/jot.gif (needs vhs and gifsicle)
 ```
 
 Ideas and pull requests are welcome.

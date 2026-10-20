@@ -1,0 +1,18 @@
+● The deploy fails because the migration never releases its lock.
+
+  What happens, in order:
+
+  1. The release job starts the migration and takes a table lock.
+  2. The old pods are still serving traffic, and their health
+     checks keep a long transaction open on the same table.
+  3. The migration waits for that transaction, hits the 5 minute
+     job timeout, and the rollout is marked failed.
+
+  Two ways out:
+
+  a. Drain the old pods before migrating. Safest, but it adds
+     about two minutes of reduced capacity to every deploy.
+  b. Move the migration to a pre-deploy hook with lock_timeout
+     set, so it fails fast and retries instead of hanging.
+
+  I'd go with (b). Want me to write the hook?

@@ -1,7 +1,7 @@
 EMACS ?= emacs
 BATCH = $(EMACS) -Q --batch -L .
 
-.PHONY: all test test-vterm compile lint clean
+.PHONY: all test test-vterm compile lint demo clean
 
 all: compile lint test
 
@@ -27,6 +27,11 @@ lint:
 	    (package-refresh-contents) (package-install 'package-lint)) \
 	  (require 'package-lint))" \
 	  -f package-lint-batch-and-exit jot.el
+
+# Re-record the README GIF.  See demo/demo.tape.
+demo:
+	vhs demo/demo.tape
+	gifsicle -O3 --lossy=30 --colors 64 -b demo/jot.gif
 
 clean:
 	rm -rf *.elc test/*.elc .lint-elpa
