@@ -27,7 +27,8 @@ Type "release job"
 Enter
 Sleep 1s
 
-# C-c j: the line is quoted, type the note, C-c j: back to reading.
+# C-c j: the note pops up under the line, already quoted.  Type, then
+# C-c j again: back to reading, still in copy mode.
 Ctrl+C
 Type "j"
 Sleep 1200ms
@@ -50,9 +51,15 @@ Ctrl+C
 Type "j"
 Sleep 1200ms
 Type "what lock_timeout? 5s?"
-Sleep 800ms
-Ctrl+C
-Type "j"
+Sleep 1200ms
+
+# The pop-up opens on the newest note, but every earlier one is a search away.
+Ctrl+R
+Type "users"
+Sleep 1800ms
+Enter
+Sleep 600ms
+Ctrl+C Ctrl+C
 Sleep 1500ms
 
 # C-c J: every note goes to the prompt as one paste, nothing is sent.

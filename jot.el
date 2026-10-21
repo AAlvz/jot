@@ -6,7 +6,7 @@
 ;; Maintainer: AAlvz <alfonso@alvz.mx>
 ;; Assisted-by: Claude Code:claude-opus-5-5
 ;; URL: https://github.com/AAlvz/jot
-;; Version: 0.1.0
+;; Version: 0.2.0
 ;; Package-Requires: ((emacs "29.1"))
 ;; Keywords: convenience, terminals, outlines
 
@@ -31,11 +31,16 @@
 ;; take notes on long output -- an AI assistant's answer, a build log, a
 ;; diff -- without losing your place.
 ;;
-;; `jot-toggle' opens the notepad in a side window, quoting the line at
-;; point (or the region) so each note says what it is about.  Calling it
-;; again hides the notepad and returns you to the window and position you
-;; came from.  Notes accumulate across toggles until `jot-paste' inserts them
-;; all at point and clears the notepad.
+;; `jot-toggle' pops the notepad up right below the line you are on, like a
+;; sticky note, and quotes that line (or the region) so each note says what
+;; it is about.  Calling it again hides the notepad and returns you to the
+;; window and position you came from.  Notes accumulate across toggles until
+;; `jot-paste' inserts them all at point and clears the notepad.
+;;
+;; The pop-up shows the whole notepad, opened on the newest note: scroll or
+;; search to reach earlier ones.  It needs a graphical display, or Emacs 31
+;; or later on a text terminal; anywhere else, or with `jot-display' set to
+;; `side', the notepad docks in a side window instead.
 ;;
 ;; It was written for terminals inside Emacs.  In a vterm buffer, point is
 ;; only meaningful in `vterm-copy-mode', so that is when the line is quoted,
@@ -73,7 +78,7 @@
   :type 'file)
 
 (defcustom jot-window-side 'bottom
-  "Side of the frame on which the notepad pops up."
+  "Side of the frame where the notepad docks, when not a pop-up."
   :type '(choice (const bottom) (const top) (const left) (const right)))
 
 (defcustom jot-window-size 0.3
@@ -82,29 +87,33 @@ A float is a fraction of the frame, an integer a number of lines (or
 columns, for the left and right sides)."
   :type 'number)
 
-(defcustom jot-display 'side
+(defcustom jot-display 'popup
   "How the notepad is shown.
-`side' docks it in a side window, see `jot-window-side'.  `popup' floats
-it in a small frame next to point, like a sticky note, sized by
-`jot-popup-width' and `jot-popup-height'.  The popup needs a graphical
-display, or Emacs 31 or later on a text terminal; elsewhere jot falls
-back to `side'."
+`popup' floats it in a small frame next to point, like a sticky note,
+sized by `jot-popup-width' and `jot-popup-height' and colored by the
+`jot-popup' face.  It needs a graphical display, or Emacs 31 or later on
+a text terminal; elsewhere jot falls back to `side'.  `side' docks it in
+a side window, see `jot-window-side' and `jot-window-size'."
   :type '(choice (const :tag "Side window" side)
-                 (const :tag "Pop-up next to point" popup)))
+                 (const :tag "Pop-up next to point" popup))
+  :package-version '(jot . "0.2.0"))
 
 (defcustom jot-popup-width 60
   "Width of the pop-up notepad, in columns.
 It is narrowed to fit when the window is smaller."
-  :type 'natnum)
+  :type 'natnum
+  :package-version '(jot . "0.2.0"))
 
 (defcustom jot-popup-height 8
   "Height of the pop-up notepad, in lines.
 It never takes more than half of the window it pops up over."
-  :type 'natnum)
+  :type 'natnum
+  :package-version '(jot . "0.2.0"))
 
 (defface jot-popup '((t :inherit tooltip))
   "Face for the pop-up notepad: its text, background and border.
-Only the colors are used.")
+Only the colors are used."
+  :package-version '(jot . "0.2.0"))
 
 (defcustom jot-quote-prefix "> "
   "String put in front of each quoted line."
@@ -307,7 +316,8 @@ it when there is no room below, and always inside the selected window."
 (defun jot-toggle (&optional no-quote)
   "Pop up the notepad, quoting the line at point; hide it if already in it.
 With the region active, quote the region instead.  With a prefix
-argument NO-QUOTE, open the notepad without quoting anything."
+argument NO-QUOTE, open the notepad without quoting anything.
+Where it appears is set by `jot-display'."
   (interactive "P")
   (let ((buf (jot--buffer)))
     (if (eq (window-buffer) buf)
