@@ -140,6 +140,17 @@ Whether a final newline is written depends on `require-final-newline'."
     (should (equal (string-trim-right (current-kill 0)) "gone"))
     (should (equal (jot-test--contents) ""))))
 
+(ert-deftest jot-test-popup-falls-back-to-side ()
+  "Where a pop-up cannot be shown, as in batch mode, `popup' uses the side window."
+  (jot-test--with-env
+    (let ((jot-display 'popup))
+      (jot-toggle)
+      (should (window-parameter (selected-window) 'window-side))
+      (should-not jot--popup-frame)
+      (insert "fallback")
+      (jot-toggle)
+      (should (equal (jot-test--contents) "> first important line\nfallback")))))
+
 (ert-deftest jot-test-vterm ()
   "Quote from copy mode, then paste into the shell as one block."
   (skip-unless (and (not jot-test-skip-vterm)
