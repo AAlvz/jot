@@ -126,6 +126,20 @@
     (should (string-suffix-p "> first important line\n? what is it?"
                              (buffer-string)))))
 
+(ert-deftest jot-ask-test-ask-from-inside-stays-in-entry ()
+  "Asking again inside the notepad adds to the entry, keeping its quote."
+  (jot-ask-test--with-env
+    (jot-ask)
+    (jot-ask)                           ; twice in a row: still one `? ' line
+    (should (eq (current-buffer) (get-file-buffer jot-file)))
+    (insert "why?")
+    (jot-ask-send)
+    (jot-ask-test--wait)
+    (should (string-match-p "first important line" (car (car jot-ask-test--calls))))
+    (jot-toggle)
+    (should (equal (jot-test--contents)
+                   "> first important line\n? why?\n= answer 1\n  second line"))))
+
 (ert-deftest jot-ask-test-empty-question-errors ()
   (jot-ask-test--with-env
     (jot-ask)

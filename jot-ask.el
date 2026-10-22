@@ -350,10 +350,19 @@ that conversation, if it was asked in the same mode."
 ;;;###autoload
 (defun jot-ask (&optional other-mode)
   "Pop the notepad up with the line or region quoted, ready for a question.
-Type the question and send it with \\<jot-mode-map>\\[jot-ask-send].  With a prefix
+Type the question and send it with \\<jot-mode-map>\\[jot-ask-send].  In the notepad, add
+a question to the entry at point instead.  With a prefix
 argument OTHER-MODE, ask in the mode other than `jot-ask-default-mode'."
   (interactive "P")
-  (jot--open nil jot-question-prefix)
+  (if (eq (window-buffer) (jot--buffer))
+      ;; Already in the notepad: ask more in the entry at point, which keeps
+      ;; its quote as the question's context.
+      (progn
+        (goto-char (cdr (jot--entry-bounds)))
+        (unless (looking-back (concat "^" (regexp-quote jot-question-prefix))
+                              (line-beginning-position))
+          (insert (if (bolp) "" "\n") jot-question-prefix)))
+    (jot--open nil jot-question-prefix))
   (when other-mode (jot-ask-toggle-mode)))
 
 (provide 'jot-ask)

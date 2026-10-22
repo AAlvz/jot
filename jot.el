@@ -544,6 +544,10 @@ Where it appears is set by `jot-display'."
 (defun jot--open (&optional no-quote suffix)
   "Pop the notepad up as `jot-toggle' does, then insert SUFFIX if given.
 With NO-QUOTE, quote nothing.  Return the notepad's window."
+  ;; Opening from inside the notepad would make the new pop-up a child of
+  ;; the one being replaced, and it would die with it.  Go back first.
+  (when (eq (window-buffer) (jot--buffer))
+    (jot-hide))
   (let* ((buf (jot--buffer))
          (quoted (unless no-quote (jot--quote)))
          (popup (jot--popup-p))
