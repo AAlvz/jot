@@ -29,7 +29,7 @@ mode**: no toggling in and out of copy mode for every note.
 
 | Key (suggested) | Command | What it does |
 |---|---|---|
-| `C-c j` | `jot-toggle` | Pop the notepad up, quoting the line at point (or the region). Again: hide it and go back |
+| `C-c j` | `jot-toggle` | Pop the notepad up, quoting the line at point, or the region (a rectangle from `C-x SPC` quotes just its columns). Again: hide it and go back |
 | `C-u C-c j` | `jot-toggle` | Pop it up without quoting anything |
 | `C-c C-c` | `jot-hide` | In the notepad: hide it and go back |
 | `C-c J` | `jot-paste` | Paste every note at point, then clear the notepad |

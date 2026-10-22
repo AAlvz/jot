@@ -84,6 +84,25 @@ Whether a final newline is written depends on `require-final-newline'."
     (should (equal (jot-test--contents)
                    "> first important line\n> second line\nboth"))))
 
+(ert-deftest jot-test-rectangle-is-quoted ()
+  "With `rectangle-mark-mode', only the rectangle's columns are quoted."
+  (jot-test--with-env
+    (erase-buffer)
+    (insert "alpha  KEEP-1  tail one\nbeta   KEEP-2  tail two\n")
+    (goto-char (point-min))
+    (transient-mark-mode 1)
+    (move-to-column 7)
+    (rectangle-mark-mode 1)
+    (forward-line 1)
+    (move-to-column 13)
+    (jot-toggle)
+    (insert "cols only")
+    (jot-toggle)
+    (should-not (region-active-p))
+    (should-not (bound-and-true-p rectangle-mark-mode))
+    (should (equal (jot-test--contents)
+                   "> KEEP-1\n> KEEP-2\ncols only"))))
+
 (ert-deftest jot-test-prefix-skips-quote ()
   (jot-test--with-env
     (jot-toggle t) (insert "plain") (jot-toggle)

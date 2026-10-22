@@ -6,7 +6,7 @@
 ;; Maintainer: AAlvz <alfonso@alvz.mx>
 ;; Assisted-by: Claude Code:claude-opus-5-5
 ;; URL: https://github.com/AAlvz/jot
-;; Version: 0.2.0
+;; Version: 0.2.1
 ;; Package-Requires: ((emacs "29.1"))
 ;; Keywords: convenience, terminals, outlines
 
@@ -198,12 +198,15 @@ Return nil outside vterm buffers."
 
 (defun jot--quote ()
   "Return the region, or the line at point, as quoted lines, or nil.
+A rectangular region quotes only the rectangle.
 Nil when a predicate in `jot-quote-predicates' vetoes it and no region
 is active."
   (when (or (use-region-p)
             (not (memq 'no (mapcar #'funcall jot-quote-predicates))))
     (let* ((text (if (use-region-p)
-                     (buffer-substring-no-properties (region-beginning) (region-end))
+                     ;; The same extraction copy and kill use, so a
+                     ;; `rectangle-mark-mode' region gives just its columns.
+                     (substring-no-properties (funcall region-extract-function nil))
                    (buffer-substring-no-properties (line-beginning-position)
                                                    (line-end-position))))
            (lines (seq-remove #'string-empty-p

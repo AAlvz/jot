@@ -2,6 +2,13 @@
 
 All notable changes to jot. Versions follow [semver](https://semver.org).
 
+## 0.2.1 — 2026-10-22
+
+### Fixed
+
+- A region made with `rectangle-mark-mode` (`C-x SPC`) now quotes only the
+  rectangle's columns instead of every line it spans in full.
+
 ## 0.2.0 — 2026-10-21
 
 ### Added
