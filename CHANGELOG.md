@@ -7,8 +7,8 @@ All notable changes to jot. Versions follow [semver](https://semver.org).
 ### Added
 
 - **jot-ask**: send a note as a question to Claude Code (`claude -p`), with
-  the answer written into the notepad and follow-ups continuing the same
-  conversation. `jot-ask` asks straight from a highlight; `C-c C-a` sends the
+  the answer written into the notepad. A follow-up is sent with the entry's
+  quote and earlier questions and answers, so it continues the conversation. `jot-ask` asks straight from a highlight; `C-c C-a` sends the
   note being written.
 - Quick and project questions. Quick ones run from a clean folder with no
   tools; project ones run from the project of the buffer being read and may

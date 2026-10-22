@@ -230,9 +230,11 @@ tokens or internal names, so look at what you quote before asking.
 | `jot-show-hints` | `t` | The key line at the top of the notepad |
 | `jot-question-prefix`, `jot-answer-prefix` | `"? "`, `"= "` | How questions and answers are marked |
 
-To use another command-line tool, set `jot-ask-command-function` to a function
-that takes the prompt, mode, session ID and whether it is a follow-up, and
-returns the command to run. Its standard output is the answer.
+Every question is a single, standalone call. A follow-up is sent with the
+entry's quote and its earlier questions and answers, which is how it continues
+the conversation. To use another command-line tool, set
+`jot-ask-command-function` to a function that takes the prompt and the mode
+and returns the command to run. Its standard output is the answer.
 
 ## Terminals
 

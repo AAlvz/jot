@@ -547,6 +547,13 @@ hole in it.  They are frame-local, so other frames are untouched."
           (redraw-frame jot--popup-frame)
         (redraw-display)))))
 
+(defun jot--refresh-popup ()
+  "Make sure the pop-up, if any, shows the notepad as it is now."
+  (when (frame-live-p jot--popup-frame)
+    (if (display-graphic-p jot--popup-frame)
+        (redraw-frame jot--popup-frame)
+      (redraw-display))))
+
 (defun jot--set-asking (asking)
   "Mark the notepad as ASKING a question or not, and recolor the pop-up."
   (setq jot--asking asking)

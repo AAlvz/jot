@@ -49,6 +49,7 @@
 
 ;;; Code:
 
+(require 'cl-lib)
 (require 'jot)
 
 (defgroup jot-ask nil
@@ -87,10 +88,10 @@ get no tools, and neither mode can reach MCP servers."
 
 (defcustom jot-ask-command-function #'jot-ask-claude-command
   "Function returning the command that answers a question.
-It is called with PROMPT, MODE (`quick' or `project'), SESSION (a UUID
-string) and RESUME (non-nil for a follow-up in that session), and
-returns the program and its arguments as a list.  The command runs in
-the mode's folder and its standard output is the answer."
+It is called with PROMPT and MODE (`quick' or `project'), and returns
+the program and its arguments as a list.  The command runs in the mode's
+folder and its standard output is the answer.  Every call stands alone:
+for a follow-up, PROMPT carries the conversation so far."
   :type 'function)
 
 (defcustom jot-ask-expected-seconds 5
@@ -108,9 +109,11 @@ longer it never gets there: it shows 0.1, then 0.01, 0.001 and so on."
 
 ;;;; The command
 
-(defun jot-ask-claude-command (prompt mode session resume)
-  "Return a `claude -p' command for PROMPT.
-MODE, SESSION and RESUME are as described in `jot-ask-command-function'."
+(defun jot-ask-claude-command (prompt mode)
+  "Return a `claude -p' command for PROMPT, asked in MODE.
+Each question is its own short session, which is not kept: follow-ups
+carry their conversation in PROMPT instead of resuming one, since
+`claude --resume' could hang when started from inside Emacs."
   `(,jot-ask-program
     "-p"
     ,@(when jot-ask-model (list "--model" jot-ask-model))
@@ -119,17 +122,9 @@ MODE, SESSION and RESUME are as described in `jot-ask-command-function'."
     ;; connectors included.  A quick question should reach none of them.
     "--strict-mcp-config"
     "--append-system-prompt" ,jot-ask-instructions
-    ,@(if resume (list "--resume" session) (list "--session-id" session))
+    "--no-session-persistence"
     ;; `--tools' takes several values, so mark where the prompt starts.
     "--" ,prompt))
-
-(defun jot-ask--uuid ()
-  "Return a random version 4 UUID."
-  (let ((bytes (mapcar (lambda (_) (random 256)) (make-list 16 0))))
-    (setf (nth 6 bytes) (logior #x40 (logand (nth 6 bytes) #x0f))
-          (nth 8 bytes) (logior #x80 (logand (nth 8 bytes) #x3f)))
-    (apply #'format "%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x"
-           bytes)))
 
 ;;;; Reading the entry
 
@@ -153,39 +148,62 @@ MODE, SESSION and RESUME are as described in `jot-ask-command-function'."
 
 (defun jot-ask--entry ()
   "Describe the entry around point for sending.
-Return a plist: :quote, the quoted lines without their prefix; :start and
-:end of the question still to be sent; :session, the conversation an
-earlier question in this entry belongs to, if any."
+Return a plist: :quote, the quoted lines without their prefix; :turns,
+the earlier questions and answers as (QUESTION . ANSWER) conses, oldest
+first; :start and :end of the question still to be sent, or nil :start
+when the entry ends with an answer."
   (pcase-let ((`(,start . ,end) (jot--entry-bounds))
               (quote-lines nil)
-              (q-start nil)
-              (session nil))
-    (save-excursion
-      (goto-char start)
-      (while (< (point) end)
-        (cond ((jot-ask--prefixed-p jot-quote-prefix)
-               (push (buffer-substring-no-properties
-                      (+ (point) (length jot-quote-prefix)) (line-end-position))
-                     quote-lines)
-               (setq q-start nil))
-              ((jot-ask--answer-line-p)
-               (setq q-start nil))
-              (t
-               (when-let* ((s (get-text-property (point) 'jot-ask-session)))
-                 (setq session s))
-               (unless q-start (setq q-start (point)))))
-        (forward-line 1)))
+              (turns nil)
+              (question nil)              ; (START . LINES) being read
+              (answer nil))               ; lines of the answer being read
+    (cl-flet ((line () (buffer-substring-no-properties
+                        (point) (line-end-position)))
+              (close-turn ()
+                (when (and question answer)
+                  (let ((a (string-join (nreverse answer) " ")))
+                    ;; A failed answer is no context for the next question.
+                    (unless (string-prefix-p "[error]" a)
+                      (push (cons (string-join (reverse (cdr question)) "\n") a)
+                            turns)))
+                  (setq question nil answer nil))))
+      (save-excursion
+        (goto-char start)
+        (while (< (point) end)
+          (cond ((jot-ask--prefixed-p jot-quote-prefix)
+                 (close-turn)
+                 (push (substring (line) (length jot-quote-prefix)) quote-lines))
+                ((jot-ask--prefixed-p jot-answer-prefix)
+                 (push (substring (line) (length jot-answer-prefix)) answer))
+                ((and answer (jot-ask--answer-line-p))
+                 (push (string-trim (line)) answer))
+                (t
+                 (close-turn)
+                 (let ((text (string-remove-prefix jot-question-prefix (line))))
+                   (if question
+                       (setcdr question (cons text (cdr question)))
+                     (setq question (list (point) text))))))
+          (forward-line 1))
+        (close-turn)))
     (list :quote (nreverse quote-lines)
-          :start q-start
-          :end end
-          :session session)))
+          :turns (nreverse turns)
+          :start (and question (not answer) (car question))
+          :end end)))
 
-(defun jot-ask--prompt (quote question)
-  "Return the text sent for QUESTION about QUOTE, a list of lines."
-  (if quote
-      (concat "About this text:\n\n" (string-join quote "\n")
-              "\n\nQuestion: " question)
-    question))
+(defun jot-ask--prompt (quote turns question)
+  "Return the text sent for QUESTION.
+QUOTE is the list of quoted lines it is about, TURNS the earlier
+questions and answers of the entry, as (QUESTION . ANSWER) conses."
+  (concat
+   (when quote
+     (concat "About this text:\n\n" (string-join quote "\n") "\n\n"))
+   (when turns
+     (concat "Earlier in this conversation:\n\n"
+             (mapconcat (lambda (turn)
+                          (format "Q: %s\nA: %s" (car turn) (cdr turn)))
+                        turns "\n\n")
+             "\n\n"))
+   (if (or quote turns) (concat "Question: " question) question)))
 
 ;;;; Waiting and answering
 
@@ -263,7 +281,9 @@ Blank lines are dropped, since they would split the entry."
                 (dolist (w waiting) (set-window-point w ready))
                 (when at-point (setq at-point ready)))))
           (when (integerp at-point) (goto-char at-point)))
-        (jot--save buf)))
+        (jot--save buf)
+        ;; A pop-up in a terminal does not always show new text by itself.
+        (jot--refresh-popup)))
     (set-marker marker nil)))
 
 (defun jot-ask--finish (proc marker overlay out err)
@@ -290,11 +310,10 @@ OVERLAY is its placeholder; OUT and ERR hold its output and errors."
   (kill-buffer out)
   (kill-buffer err))
 
-(defun jot-ask--start (prompt mode session resume directory marker)
-  "Ask PROMPT in MODE from DIRECTORY, and answer at MARKER.
-SESSION and RESUME are as described in `jot-ask-command-function'."
+(defun jot-ask--start (prompt mode directory marker)
+  "Ask PROMPT in MODE from DIRECTORY, and answer at MARKER."
   (let* ((default-directory directory)
-         (command (funcall jot-ask-command-function prompt mode session resume))
+         (command (funcall jot-ask-command-function prompt mode))
          (out (generate-new-buffer " *jot-ask*"))
          (err (generate-new-buffer " *jot-ask-errors*"))
          (overlay (make-overlay marker marker nil t nil)))
@@ -341,8 +360,8 @@ A project question with no project to ask from goes out quick."
 (defun jot-ask-send ()
   "Send the question being written in the notepad entry at point.
 The question is what was typed after the quote, or after the last
-answer.  A follow-up in an entry that was already answered continues
-that conversation, if it was asked in the same mode."
+answer.  A follow-up is sent with the entry's quote and its earlier
+questions and answers, so it continues that conversation."
   (interactive)
   (unless (eq (current-buffer) (jot--buffer))
     (user-error "Not in the jot notepad"))
@@ -356,9 +375,9 @@ that conversation, if it was asked in the same mode."
       (user-error "Still waiting for the answer to this entry's last question")))
   (let* ((entry (jot-ask--entry))
          (quote (plist-get entry :quote))
+         (turns (plist-get entry :turns))
          (start (plist-get entry :start))
          (end (plist-get entry :end))
-         (session (plist-get entry :session))
          (question (and start (string-trim
                                (buffer-substring-no-properties start end)))))
     (when (or (null question)
@@ -374,21 +393,15 @@ that conversation, if it was asked in the same mode."
     (setq question (string-trim (string-remove-prefix
                                  (string-trim jot-question-prefix) question)))
     (pcase-let* ((`(,dir . ,mode) (jot-ask--directory-for (jot--ask-mode)))
-                 (resume (and session
-                              (equal (plist-get session :dir) dir)
-                              (eq (plist-get session :mode) mode)))
-                 (id (if resume (plist-get session :id) (jot-ask--uuid)))
-                 (prompt (if resume question (jot-ask--prompt quote question)))
+                 (prompt (jot-ask--prompt quote turns question))
                  ;; Right after the question text, so trailing blank lines
                  ;; cannot end up between the question and its answer.
                  (marker (copy-marker (save-excursion
                                         (goto-char end)
                                         (skip-chars-backward " \t\n" start)
                                         (point)))))
-      (put-text-property start end 'jot-ask-session
-                         (list :id id :dir dir :mode mode))
       (setq jot--pending nil)
-      (jot-ask--start prompt mode id resume dir marker)
+      (jot-ask--start prompt mode dir marker)
       (jot--set-asking t)
       (message "Jot: asking %s…" (if (eq mode 'project)
                                      (format "from %s" (abbreviate-file-name dir))

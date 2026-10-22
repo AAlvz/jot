@@ -136,24 +136,47 @@ so a wrong guess is visible before anything is sent.
 
 ## Conversations
 
-- Every first question starts a new conversation with an ID jot chooses
-  itself (`--session-id <uuid>`), so no output parsing is needed to continue it.
-- A follow-up runs `--resume <uuid>` **from the same directory**. Claude Code
-  stores conversations per directory, so jot records the directory and mode
-  with each conversation.
-- Switching modes in the middle of a conversation starts a new one instead of
-  half-continuing the old one.
-- Conversation IDs live in memory for this Emacs session. After a restart, a
-  follow-up on an old question starts a new conversation.
+The first design resumed Claude Code sessions: `--session-id` on the first
+question, `--resume` on follow-ups. In the prototype, every `--resume` started
+from inside the user's Emacs hung. It sat idle with the user's other terminals
+(`/dev/ttys001`…) open for reading, while the same command run outside Emacs
+answered in 4 seconds. First questions never hung.
+
+So follow-ups do not resume anything. **Every question is one standalone
+call**, and a follow-up carries the conversation in its prompt:
+
+```
+About this text:
+
+<the quote>
+
+Earlier in this conversation:
+
+Q: <first question>
+A: <its answer>
+
+Question: <the follow-up>
+```
+
+The notepad already holds all of it, so nothing has to be stored.
+
+- Calls pass `--no-session-persistence`, so questions leave no saved sessions
+  behind.
+- Switching modes mid-entry only changes where the next question runs; it keeps
+  the whole conversation as context.
+- Answers that failed (`= [error] …`) are left out of the context.
+- It works the same with any other command-line tool, sessions or not.
+- One question per entry at a time: sending again while an entry waits is
+  refused.
 
 ## Command and configuration
 
 The default runs Claude Code in print mode, which answers once and exits:
 
 ```
-claude -p --model <jot-ask-model> --tools "" \
+claude -p --model <jot-ask-model> --tools "" --strict-mcp-config \
        --append-system-prompt <jot-ask-instructions> \
-       --session-id <uuid> "<quote + question>"
+       --no-session-persistence -- "<quote + conversation + question>"
 ```
 
 It runs as an asynchronous process, so Emacs never freezes.
@@ -169,9 +192,8 @@ It runs as an asynchronous process, so Emacs never freezes.
 | `jot-paste-answers` | `t` | `nil` leaves answers out of `C-c J` |
 | `jot-show-hints` | `t` | the key line at the top of the popup |
 
-Other CLIs may have no sessions or system prompts. For those, follow-ups resend
-the earlier questions and answers as context, and the instructions are
-prepended to the prompt.
+Since follow-ups carry their own context, other CLIs need no session support.
+For one with no system prompt option, prepend the instructions to the prompt.
 
 ## Notepad format
 

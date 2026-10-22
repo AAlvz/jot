@@ -12,11 +12,11 @@
 (require 'jot-test)
 
 (defvar jot-ask-test--calls nil
-  "Calls to the fake command, newest first: (PROMPT MODE SESSION RESUME DIR).")
+  "Calls to the fake command, newest first: (PROMPT MODE DIR).")
 
-(defun jot-ask-test--fake (prompt mode session resume)
+(defun jot-ask-test--fake (prompt mode)
   "Record a call and return a command that prints a two-line answer."
-  (push (list prompt mode session resume default-directory) jot-ask-test--calls)
+  (push (list prompt mode default-directory) jot-ask-test--calls)
   (list "printf" "%s\n\n%s\n" (format "answer %d" (length jot-ask-test--calls))
         "second line"))
 
@@ -46,11 +46,11 @@
     (should (equal (jot-test--contents)
                    (concat "> first important line\n? what is it?\n"
                            "= answer 1\n  second line")))
-    (pcase-let ((`(,prompt ,mode ,_ ,resume ,dir) (car jot-ask-test--calls)))
+    (pcase-let ((`(,prompt ,mode ,dir) (car jot-ask-test--calls)))
       (should (string-match-p "first important line" prompt))
       (should (string-match-p "Question: what is it\\?" prompt))
+      (should-not (string-match-p "Earlier in this conversation" prompt))
       (should (eq mode 'quick))
-      (should-not resume)
       (should (file-equal-p dir jot-ask-quick-directory)))))
 
 (ert-deftest jot-ask-test-plain-note-becomes-question ()
@@ -62,7 +62,8 @@
     (jot-toggle)
     (should (string-match-p "^\\? just a note\n= answer 1" (jot-test--contents)))))
 
-(ert-deftest jot-ask-test-follow-up-resumes ()
+(ert-deftest jot-ask-test-follow-up-carries-conversation ()
+  "A follow-up is a fresh call that carries the quote and earlier turns."
   (jot-ask-test--with-env
     (jot-ask)
     (insert "first?")
@@ -73,18 +74,37 @@
     (insert "and then?")
     (jot-ask-send)
     (jot-ask-test--wait)
-    (pcase-let ((`(,p2 ,_ ,s2 ,r2 ,_) (nth 0 jot-ask-test--calls))
-                (`(,_ ,_ ,s1 ,r1 ,_) (nth 1 jot-ask-test--calls)))
-      (should-not r1)
-      (should r2)
-      (should (equal s1 s2))
-      ;; A follow-up sends only the new question.
-      (should (equal p2 "and then?")))
+    (let ((prompt (car (car jot-ask-test--calls))))
+      (should (string-match-p "About this text:\n\nfirst important line" prompt))
+      (should (string-match-p "Q: first\\?\nA: answer 1 second line" prompt))
+      (should (string-suffix-p "Question: and then?" prompt)))
     (jot-toggle)
     (should (string-suffix-p "? and then?\n= answer 2\n  second line"
                              (jot-test--contents)))))
 
-(ert-deftest jot-ask-test-mode-switch-starts-new-conversation ()
+(ert-deftest jot-ask-test-errors-are-not-context ()
+  (jot-ask-test--with-env
+    (let ((jot-ask-command-function
+           (lambda (prompt mode)
+             (jot-ask-test--fake prompt mode)
+             (if (= (length jot-ask-test--calls) 1)
+                 (list "sh" "-c" "echo broken >&2; exit 3")
+               (list "printf" "fine")))))
+      (jot-ask)
+      (insert "first?")
+      (jot-ask-send)
+      (jot-ask-test--wait)
+      (insert "again?")
+      (jot-ask-send)
+      (jot-ask-test--wait)
+      (let ((prompt (car (car jot-ask-test--calls))))
+        (should-not (string-match-p "broken" prompt))
+        (should-not (string-match-p "Earlier in this conversation" prompt)))
+      (jot-toggle)
+      (should (string-match-p "= \\[error\\] broken" (jot-test--contents))))))
+
+(ert-deftest jot-ask-test-mode-switch-keeps-context ()
+  "Switching mode mid-entry changes where it asks, not what it knows."
   (jot-ask-test--with-env
     (let ((default-directory dir))
       (jot-ask)
@@ -95,11 +115,11 @@
       (insert "second?")
       (jot-ask-send)
       (jot-ask-test--wait)
-      (pcase-let ((`(,_ ,m2 ,s2 ,r2 ,_) (nth 0 jot-ask-test--calls))
-                  (`(,_ ,_ ,s1 ,_ ,_) (nth 1 jot-ask-test--calls)))
+      (pcase-let ((`(,p2 ,m2 ,_) (nth 0 jot-ask-test--calls))
+                  (`(,_ ,m1 ,_) (nth 1 jot-ask-test--calls)))
+        (should (eq m1 'quick))
         (should (eq m2 'project))
-        (should-not r2)
-        (should-not (equal s1 s2))))))
+        (should (string-match-p "Q: first" p2))))))
 
 (ert-deftest jot-ask-test-project-without-project-asks-quick ()
   (jot-ask-test--with-env
@@ -166,16 +186,15 @@
   "No MCP servers in either mode, and the prompt is marked off by `--'."
   (let ((jot-ask-program "claude") (jot-ask-model nil))
     (dolist (mode '(quick project))
-      (let ((cmd (jot-ask-claude-command "--tools trick" mode "id-1" nil)))
+      (let ((cmd (jot-ask-claude-command "--tools trick" mode)))
         (should (member "--strict-mcp-config" cmd))
+        (should (member "--no-session-persistence" cmd))
         (should (equal (last cmd 2) '("--" "--tools trick")))
         (should (equal (cadr (member "--tools" cmd))
                        (if (eq mode 'project) jot-ask-project-tools "")))
-        (should (equal (cadr (member "--session-id" cmd)) "id-1"))
-        (should-not (member "--resume" cmd))))
-    (let ((cmd (jot-ask-claude-command "again" 'quick "id-1" t)))
-      (should (equal (cadr (member "--resume" cmd)) "id-1"))
-      (should-not (member "--session-id" cmd)))))
+        ;; Never resume: from inside Emacs, `claude --resume' could hang.
+        (should-not (member "--resume" cmd))
+        (should-not (member "--session-id" cmd))))))
 
 (ert-deftest jot-ask-test-countdown-never-reaches-zero ()
   (let ((jot-ask-expected-seconds 5))
