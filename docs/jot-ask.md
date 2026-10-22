@@ -1,6 +1,7 @@
 # jot-ask: quick questions from the notepad
 
-Status: **design**, not built. Comments welcome before any code.
+Status: **prototype** on the `feature/jot-ask` branch. The user guide is the
+"Asking questions" section of the README; this file keeps the reasoning.
 
 ## The idea
 
