@@ -177,5 +177,63 @@
       (should (equal (cadr (member "--resume" cmd)) "id-1"))
       (should-not (member "--session-id" cmd)))))
 
+(ert-deftest jot-ask-test-countdown-never-reaches-zero ()
+  (let ((jot-ask-expected-seconds 5))
+    (should (equal (jot-ask--countdown 0) "5"))
+    (should (equal (jot-ask--countdown 3.2) "2"))
+    (should (equal (jot-ask--countdown 4.5) "0.1"))
+    (should (equal (jot-ask--countdown 5.5) "0.01"))
+    (should (equal (jot-ask--countdown 8.5) "0.00001"))
+    (should (string-prefix-p "0.000" (jot-ask--countdown 1000)))
+    (should (<= (length (jot-ask--countdown 1000)) 32))))
+
+(ert-deftest jot-ask-test-no-double-send ()
+  "A second send while the entry is waiting is refused, not sent."
+  (jot-ask-test--with-env
+    (let ((jot-ask-command-function
+           (lambda (&rest args) (apply #'jot-ask-test--fake args)
+             (list "sleep" "2"))))
+      (jot-ask)
+      (insert "slow?")
+      (jot-ask-send)
+      (should-error (jot-ask-send) :type 'user-error)
+      (should (= (length jot-ask-test--calls) 1))
+      (jot-ask-test--wait))))
+
+(ert-deftest jot-ask-test-timeout-reports-error ()
+  (jot-ask-test--with-env
+    (let ((jot-ask-timeout 0.5)
+          (jot-ask-command-function (lambda (&rest _) (list "sleep" "30"))))
+      (jot-ask)
+      (insert "never?")
+      (jot-ask-send)
+      (jot-ask-test--wait)
+      (jot-toggle)
+      (should (string-match-p "= \\[error\\] no answer after" (jot-test--contents))))))
+
+(ert-deftest jot-ask-test-trailing-newline-no-blank-line ()
+  (jot-ask-test--with-env
+    (jot-ask)
+    (insert "q? \n")
+    (jot-ask-send)
+    (jot-ask-test--wait)
+    (jot-toggle)
+    (should (string-match-p "^\\? q\\? *\n= answer 1" (jot-test--contents)))))
+
+(ert-deftest jot-ask-test-asking-state ()
+  (jot-ask-test--with-env
+    (jot-toggle)
+    (should-not jot--asking)
+    (should (eq (jot--popup-face) 'jot-popup))
+    (jot-toggle)
+    (jot-ask)
+    (should jot--asking)
+    (should (eq (jot--popup-face) 'jot-popup-ask))
+    (jot-ask-toggle-mode)
+    (should (eq (jot--popup-face) 'jot-popup-ask-project))
+    (jot-toggle)
+    (jot-toggle)
+    (should-not jot--asking)))
+
 (provide 'jot-ask-test)
 ;;; jot-ask-test.el ends here

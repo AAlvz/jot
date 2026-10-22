@@ -117,6 +117,21 @@ It never takes more than half of the window it pops up over."
 Only the colors are used."
   :package-version '(jot . "0.2.0"))
 
+(defface jot-popup-ask
+  '((((background dark)) :background "#233a57" :foreground "#e4ecf5")
+    (((background light)) :background "#dce8f7" :foreground "#1b2733")
+    (t :inherit jot-popup))
+  "Face for the pop-up while asking a `quick' question.
+A different color from note taking, so it is clear the note goes out."
+  :package-version '(jot . "0.3.0"))
+
+(defface jot-popup-ask-project
+  '((((background dark)) :background "#2a4030" :foreground "#e5f0e6")
+    (((background light)) :background "#dff0e0" :foreground "#1d2b1f")
+    (t :inherit jot-popup-ask))
+  "Face for the pop-up while asking a `project' question."
+  :package-version '(jot . "0.3.0"))
+
 (defcustom jot-quote-prefix "> "
   "String put in front of each quoted line."
   :type 'string)
@@ -185,6 +200,9 @@ it handled the paste.  When none does, the text is inserted at point."
 
 (defvar jot--pending nil
   "(START . TEXT) of the quote inserted on the last open, until written under.")
+
+(defvar jot--asking nil
+  "Non-nil while the notepad is being used to ask a question.")
 
 (defvar jot--ask-mode nil
   "Mode for the next `jot-ask' question: `quick' or `project'.")
@@ -312,6 +330,7 @@ is active."
   "Switch the next question between quick and project mode."
   (interactive)
   (setq jot--ask-mode (if (eq (jot--ask-mode) 'project) 'quick 'project))
+  (jot--paint-popup)
   (force-mode-line-update)
   (message "Jot: next question asks %s" (jot--ask-mode-label)))
 
@@ -497,16 +516,41 @@ it when there is no room below, and always inside the selected window."
       (set-window-dedicated-p win t)
       (set-window-parameter win 'mode-line-format 'none)
       (set-window-margins win 1 1)
-      ;; Its own colors, so it reads as a note on top of the text rather
-      ;; than a hole in it.  Frame-local, so other frames are untouched.
-      (let ((bg (face-background 'jot-popup nil t))
-            (fg (face-foreground 'jot-popup nil t)))
-        (dolist (face '(default fringe))
-          (set-face-attribute face frame :background bg :foreground fg))
-        (set-face-background 'child-frame-border fg frame))
+      (jot--paint-popup)
       (select-frame-set-input-focus frame)
       (select-window win)
       win)))
+
+(defun jot--popup-face ()
+  "Return the face the pop-up should wear now."
+  (cond ((not jot--asking) 'jot-popup)
+        ((eq (jot--ask-mode) 'project) 'jot-popup-ask-project)
+        (t 'jot-popup-ask)))
+
+(defun jot--paint-popup ()
+  "Color the pop-up, if any, for what it is being used for.
+Its own colors make it read as a note on top of the text rather than a
+hole in it.  They are frame-local, so other frames are untouched."
+  (when (frame-live-p jot--popup-frame)
+    (let* ((face (jot--popup-face))
+           (bg (face-background face jot--popup-frame t))
+           (fg (face-foreground face jot--popup-frame t)))
+      (dolist (f '(default fringe))
+        (set-face-attribute f jot--popup-frame :background bg :foreground fg))
+      (set-face-background 'child-frame-border fg jot--popup-frame)
+      ;; Changing faces alone leaves a terminal showing the old colors on a
+      ;; frame already on screen; the frame parameters make it repaint.
+      (modify-frame-parameters jot--popup-frame
+                               `((background-color . ,bg)
+                                 (foreground-color . ,fg)))
+      (if (display-graphic-p jot--popup-frame)
+          (redraw-frame jot--popup-frame)
+        (redraw-display)))))
+
+(defun jot--set-asking (asking)
+  "Mark the notepad as ASKING a question or not, and recolor the pop-up."
+  (setq jot--asking asking)
+  (jot--paint-popup))
 
 (defun jot--show-side (buf)
   "Show BUF in a side window, select it, and return the window."
@@ -554,6 +598,7 @@ With NO-QUOTE, quote nothing.  Return the notepad's window."
          (win (progn
                 (when (use-region-p) (deactivate-mark))
                 (setq jot--return-window (selected-window)
+                      jot--asking nil
                       jot--ask-mode nil
                       jot--ask-directory 'unknown)
                 (if popup (jot--show-popup buf) (jot--show-side buf)))))

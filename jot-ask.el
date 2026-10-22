@@ -93,7 +93,17 @@ returns the program and its arguments as a list.  The command runs in
 the mode's folder and its standard output is the answer."
   :type 'function)
 
-(defface jot-ask-pending '((t :inherit shadow))
+(defcustom jot-ask-expected-seconds 5
+  "Roughly how long an answer takes, for the countdown while waiting.
+The countdown runs from this down towards zero.  When an answer takes
+longer it never gets there: it shows 0.1, then 0.01, 0.001 and so on."
+  :type 'natnum)
+
+(defcustom jot-ask-timeout 180
+  "Seconds to wait for an answer before giving up on it."
+  :type 'natnum)
+
+(defface jot-ask-pending '((t :inherit shadow :slant italic))
   "Face for the placeholder shown while a question is being answered.")
 
 ;;;; The command
@@ -187,12 +197,24 @@ earlier question in this entry belongs to, if any."
 (defvar jot-ask--timer nil
   "Timer that animates the placeholders in `jot-ask--pending'.")
 
+(defun jot-ask--countdown (elapsed)
+  "Return the countdown to show ELAPSED seconds after asking.
+It counts down from `jot-ask-expected-seconds' and never reaches zero:
+past the expected time, each second adds a decimal place instead."
+  (let ((left (- jot-ask-expected-seconds elapsed)))
+    (if (>= left 1)
+        (number-to-string (ceiling left))
+      ;; One decimal place for the first second past 1, then one more for
+      ;; each second after that.
+      (let ((places (min 30 (1+ (floor (- 1 left))))))
+        (concat "0." (make-string (1- places) ?0) "1")))))
+
 (defun jot-ask--placeholder (start-time frame)
   "Return the placeholder for a question asked at START-TIME, at FRAME."
-  (propertize (format "\n%s%s asking… %ds" jot-answer-prefix
+  (propertize (format "\n%s%s sent · answer in %s" jot-answer-prefix
                       (aref jot-ask--spinner-frames
                             (mod frame (length jot-ask--spinner-frames)))
-                      (round (float-time (time-since start-time))))
+                      (jot-ask--countdown (float-time (time-since start-time))))
               'face 'jot-ask-pending))
 
 (defun jot-ask--tick ()
@@ -202,10 +224,16 @@ earlier question in this entry belongs to, if any."
       (progn (cancel-timer jot-ask--timer)
              (setq jot-ask--timer nil))
     (dolist (ov jot-ask--pending)
-      (let ((frame (1+ (overlay-get ov 'jot-ask-frame))))
+      (let ((frame (1+ (overlay-get ov 'jot-ask-frame)))
+            (proc (overlay-get ov 'jot-ask-process)))
         (overlay-put ov 'jot-ask-frame frame)
         (overlay-put ov 'after-string
-                     (jot-ask--placeholder (overlay-get ov 'jot-ask-time) frame))))))
+                     (jot-ask--placeholder (overlay-get ov 'jot-ask-time) frame))
+        (when (and (process-live-p proc)
+                   (> (float-time (time-since (overlay-get ov 'jot-ask-time)))
+                      jot-ask-timeout))
+          (overlay-put ov 'jot-ask-timed-out t)
+          (delete-process proc))))))
 
 (defun jot-ask--format-answer (text)
   "Return TEXT as notepad lines: the answer prefix, then indented lines.
@@ -241,12 +269,16 @@ Blank lines are dropped, since they would split the entry."
 (defun jot-ask--finish (proc marker overlay out err)
   "Handle the end of question PROC: write its answer in at MARKER.
 OVERLAY is its placeholder; OUT and ERR hold its output and errors."
-  (delete-overlay overlay)
   (let ((answer (with-current-buffer out (string-trim (buffer-string))))
-        (problem (with-current-buffer err (string-trim (buffer-string)))))
+        (problem (with-current-buffer err (string-trim (buffer-string))))
+        (timed-out (overlay-get overlay 'jot-ask-timed-out)))
+    (delete-overlay overlay)
     (jot-ask--insert-answer
      marker
-     (cond ((and (zerop (process-exit-status proc)) (not (string-empty-p answer)))
+     (cond (timed-out
+            (format "[error] no answer after %d seconds; see `jot-ask-timeout'"
+                    jot-ask-timeout))
+           ((and (zerop (process-exit-status proc)) (not (string-empty-p answer)))
             answer)
            ((not (string-empty-p problem))
             (format "[error] %s" (car (split-string problem "\n"))))
@@ -285,6 +317,7 @@ SESSION and RESUME are as described in `jot-ask-command-function'."
                  :sentinel (lambda (proc _event)
                              (unless (process-live-p proc)
                                (jot-ask--finish proc marker overlay out err))))))
+      (overlay-put overlay 'jot-ask-process proc)
       ;; Print mode would otherwise wait for more input on stdin.
       (process-send-eof proc)
       (when-let* ((errproc (get-buffer-process err)))
@@ -313,6 +346,14 @@ that conversation, if it was asked in the same mode."
   (interactive)
   (unless (eq (current-buffer) (jot--buffer))
     (user-error "Not in the jot notepad"))
+  (pcase-let ((`(,entry-start . ,entry-end) (jot--entry-bounds)))
+    ;; Two questions at once in one conversation can leave Claude Code
+    ;; stuck, and the second would not see the first answer anyway.
+    (when (seq-some (lambda (ov)
+                      (and (overlay-buffer ov)
+                           (<= entry-start (overlay-start ov) entry-end)))
+                    jot-ask--pending)
+      (user-error "Still waiting for the answer to this entry's last question")))
   (let* ((entry (jot-ask--entry))
          (quote (plist-get entry :quote))
          (start (plist-get entry :start))
@@ -338,11 +379,17 @@ that conversation, if it was asked in the same mode."
                               (eq (plist-get session :mode) mode)))
                  (id (if resume (plist-get session :id) (jot-ask--uuid)))
                  (prompt (if resume question (jot-ask--prompt quote question)))
-                 (marker (copy-marker end)))
+                 ;; Right after the question text, so trailing blank lines
+                 ;; cannot end up between the question and its answer.
+                 (marker (copy-marker (save-excursion
+                                        (goto-char end)
+                                        (skip-chars-backward " \t\n" start)
+                                        (point)))))
       (put-text-property start end 'jot-ask-session
                          (list :id id :dir dir :mode mode))
       (setq jot--pending nil)
       (jot-ask--start prompt mode id resume dir marker)
+      (jot--set-asking t)
       (message "Jot: asking %s…" (if (eq mode 'project)
                                      (format "from %s" (abbreviate-file-name dir))
                                    "quick")))))
@@ -363,6 +410,7 @@ argument OTHER-MODE, ask in the mode other than `jot-ask-default-mode'."
                               (line-beginning-position))
           (insert (if (bolp) "" "\n") jot-question-prefix)))
     (jot--open nil jot-question-prefix))
+  (jot--set-asking t)
   (when other-mode (jot-ask-toggle-mode)))
 
 (provide 'jot-ask)

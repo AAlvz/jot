@@ -18,6 +18,10 @@ All notable changes to jot. Versions follow [semver](https://semver.org).
 - The notepad's top line shows the question mode and its main keys
   (`jot-show-hints`).
 - `jot-paste-answers` leaves answers out of `jot-paste`.
+- While a question waits, its entry shows a countdown that never reaches zero
+  (`jot-ask-expected-seconds`); `jot-ask-timeout` gives up on a lost answer.
+- The pop-up is colored by what it is doing: `jot-popup` for notes,
+  `jot-popup-ask` for quick questions, `jot-popup-ask-project` for project ones.
 
 ## 0.2.1 — 2026-10-22
 

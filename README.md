@@ -171,9 +171,16 @@ Setup:
 | `C-c C-p` | in the notepad | Switch the next question between quick and project |
 | `C-c C-d` | in the notepad | Choose the project directory for the buffer being read |
 
-The notepad's top line always shows the mode and these keys. Nothing waits on
-the answer: close the notepad and keep reading, and the answer is written in
-when it arrives.
+The notepad's top line always shows the mode and these keys, and the pop-up
+changes color while you ask: gray for notes, blue for a quick question, green
+for a project question.
+
+Once sent, the entry shows `= ⠋ sent · answer in 5`, counting down. It never
+reaches zero: if the answer takes longer, it keeps going as 0.1, 0.01, 0.001…
+until the answer replaces it. Nothing waits on it either: close the notepad and
+keep reading, and the answer is written in when it arrives. Sending again
+while an entry is still waiting is refused, and an answer that never comes
+turns into an error after `jot-ask-timeout`.
 
 ### Quick and project questions
 
@@ -216,6 +223,9 @@ tokens or internal names, so look at what you quote before asking.
 | `jot-ask-project-tools` | `Read,Grep,Glob` | What project questions may use |
 | `jot-ask-program` | `claude` | The Claude Code executable |
 | `jot-ask-command-function` | `jot-ask-claude-command` | Build the command for another CLI |
+| `jot-ask-expected-seconds` | `5` | Where the countdown starts |
+| `jot-ask-timeout` | `180` | Seconds before giving up on an answer |
+| `jot-popup-ask`, `jot-popup-ask-project` (faces) | blue, green | The pop-up's colors while asking |
 | `jot-paste-answers` | `t` | `nil` leaves answers out of `C-c J` |
 | `jot-show-hints` | `t` | The key line at the top of the notepad |
 | `jot-question-prefix`, `jot-answer-prefix` | `"? "`, `"= "` | How questions and answers are marked |
