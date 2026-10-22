@@ -68,9 +68,10 @@ Nil uses whatever model Claude Code is set up to use."
 
 (defcustom jot-ask-instructions
   "You are answering inside a small pop-up notepad in Emacs, about 60 \
-columns wide. Answer in a few sentences of plain text. No headings, no \
-tables, no Markdown formatting, no preamble. If the question is \
-ambiguous, answer the most likely reading."
+columns wide. Answer in at most three short sentences of plain text, \
+unless the question asks for more. No headings, no tables, no Markdown \
+formatting, no preamble. If the question is ambiguous, answer the most \
+likely reading."
   "Instructions sent with every question, in both modes."
   :type 'string)
 
@@ -263,15 +264,20 @@ Blank lines are dropped, since they would split the entry."
             (mapconcat #'string-trim-right lines (concat "\n" indent)))))
 
 (defun jot-ask--insert-answer (marker text)
-  "Write TEXT in as the answer at MARKER, readying a follow-up if in view."
+  "Write TEXT in as the answer at MARKER, readying a follow-up if in view.
+A pop-up showing the notepad grows to show the question and its answer."
   (let ((buf (marker-buffer marker)))
     (when (buffer-live-p buf)
       (with-current-buffer buf
         (let* ((wins (get-buffer-window-list buf nil t))
                (waiting (seq-filter (lambda (w) (= (window-point w) marker)) wins))
-               (at-point (= (point) marker)))
+               (at-point (= (point) marker))
+               (question-start nil)
+               (answer-start nil))
           (save-excursion
             (goto-char marker)
+            (setq question-start (line-beginning-position)
+                  answer-start (1+ (point)))
             (insert "\n" (jot-ask--format-answer text))
             ;; Whoever was waiting right at the question goes past the
             ;; answer, onto a fresh line for a follow-up.
@@ -280,7 +286,17 @@ Blank lines are dropped, since they would split the entry."
               (let ((ready (point)))
                 (dolist (w waiting) (set-window-point w ready))
                 (when at-point (setq at-point ready)))))
-          (when (integerp at-point) (goto-char at-point)))
+          (when (integerp at-point) (goto-char at-point))
+          (jot--popup-show-range question-start answer-start
+                                 (save-excursion
+                                   (goto-char answer-start)
+                                   (forward-line 1)
+                                   (while (and (not (eobp)) (jot-ask--answer-line-p))
+                                     (forward-line 1))
+                                   ;; Include the follow-up line, if one was readied.
+                                   (if (looking-at-p (regexp-quote jot-question-prefix))
+                                       (line-end-position)
+                                     (max answer-start (1- (point)))))))
         (jot--save buf)
         ;; A pop-up in a terminal does not always show new text by itself.
         (jot--refresh-popup)))

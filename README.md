@@ -96,6 +96,7 @@ Everything is available through `M-x customize-group RET jot`.
 | `jot-display` | `popup` | `popup` next to point, or `side` for a docked window |
 | `jot-popup-width` | `60` | Pop-up width in columns, narrowed to fit the window |
 | `jot-popup-height` | `8` | Pop-up height in lines, at most half the window |
+| `jot-popup-max-height` | `20` | Lines the pop-up may grow to, to show an answer |
 | `jot-popup` (face) | inherits `tooltip` | Pop-up background and text colors |
 | `jot-window-side` | `bottom` | Side window position: `bottom`, `top`, `left`, `right` |
 | `jot-window-size` | `0.3` | Side window size: a fraction of the frame, or lines/columns |

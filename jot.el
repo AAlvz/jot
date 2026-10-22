@@ -112,6 +112,12 @@ It never takes more than half of the window it pops up over."
   :type 'natnum
   :package-version '(jot . "0.2.0"))
 
+(defcustom jot-popup-max-height 20
+  "Most lines the pop-up grows to, to show an answer from `jot-ask'.
+It never grows past the window it pops up over."
+  :type 'natnum
+  :package-version '(jot . "0.3.0"))
+
 (defface jot-popup '((t :inherit tooltip))
   "Face for the pop-up notepad: its text, background and border.
 Only the colors are used."
@@ -547,12 +553,43 @@ hole in it.  They are frame-local, so other frames are untouched."
           (redraw-frame jot--popup-frame)
         (redraw-display)))))
 
+(defun jot--popup-show-range (start answer-start end)
+  "Grow the pop-up to show START to END, and show it from START.
+The pop-up grows up to `jot-popup-max-height', staying inside the window
+it opened over and moving up when it would run past its bottom.  Point
+goes to END when it all fits, and to ANSWER-START when it does not, so a
+long answer is read from its beginning."
+  (when-let* (((frame-live-p jot--popup-frame))
+              (win (frame-root-window jot--popup-frame))
+              ((eq (window-buffer win) (current-buffer)))
+              ((window-live-p jot--return-window)))
+    (let* ((ch (frame-char-height jot--popup-frame))
+           (edges (window-inside-pixel-edges jot--return-window))
+           (room (/ (- (nth 3 edges) (nth 1 edges)) ch))
+           (header (if header-line-format 1 0))
+           (needed (+ header (count-screen-lines start end nil win)))
+           (height (max (frame-height jot--popup-frame)
+                        (min needed jot-popup-max-height (- room 2))))
+           (top (frame-parameter jot--popup-frame 'top))
+           (top (if (numberp top) top 0))
+           (outer (* (+ height 2) ch)))
+      (unless (= height (frame-height jot--popup-frame))
+        (set-frame-height jot--popup-frame height)
+        (when (> (+ top outer) (nth 3 edges))
+          (set-frame-position jot--popup-frame
+                              (frame-parameter jot--popup-frame 'left)
+                              (max (nth 1 edges) (- (nth 3 edges) outer)))))
+      (set-window-start win (save-excursion (goto-char start)
+                                            (line-beginning-position)))
+      (set-window-point win (if (<= needed height) end answer-start)))))
+
 (defun jot--refresh-popup ()
   "Make sure the pop-up, if any, shows the notepad as it is now."
   (when (frame-live-p jot--popup-frame)
     (if (display-graphic-p jot--popup-frame)
         (redraw-frame jot--popup-frame)
-      (redraw-display))))
+      (redraw-display))
+    (redisplay t)))
 
 (defun jot--set-asking (asking)
   "Mark the notepad as ASKING a question or not, and recolor the pop-up."
