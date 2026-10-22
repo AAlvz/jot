@@ -2,6 +2,23 @@
 
 All notable changes to jot. Versions follow [semver](https://semver.org).
 
+## Unreleased
+
+### Added
+
+- **jot-ask**: send a note as a question to Claude Code (`claude -p`), with
+  the answer written into the notepad and follow-ups continuing the same
+  conversation. `jot-ask` asks straight from a highlight; `C-c C-a` sends the
+  note being written.
+- Quick and project questions. Quick ones run from a clean folder with no
+  tools; project ones run from the project of the buffer being read and may
+  only read files. Neither can reach MCP servers.
+- The project of a terminal buffer comes from where its program actually runs,
+  found through the operating system, including inside tmux.
+- The notepad's top line shows the question mode and its main keys
+  (`jot-show-hints`).
+- `jot-paste-answers` leaves answers out of `jot-paste`.
+
 ## 0.2.1 — 2026-10-22
 
 ### Fixed

@@ -22,6 +22,7 @@ mode**: no toggling in and out of copy mode for every note.
 - [Install](#install)
 - [Configuration](#configuration)
 - [The pop-up](#the-pop-up)
+- [Asking questions](#asking-questions)
 - [Terminals](#terminals)
 - [Development](#development)
 
@@ -138,6 +139,90 @@ works the same way.
 The pop-up takes its colors from the `jot-popup` face, which inherits from
 `tooltip`. If it blends in with your theme, give it a background of its own
 (see the setup above), or run `M-x customize-face RET jot-popup RET`.
+
+## Asking questions
+
+Any note can be sent to an AI as a question. The answer is written into the
+notepad right under it, and a follow-up written under the answer continues the
+same conversation. By default it uses [Claude Code](https://claude.com/claude-code)
+in print mode (`claude -p`), so it uses your existing `claude` login and no
+API key is needed.
+
+```
+> The migration takes an ACCESS EXCLUSIVE lock, so set lock_timeout
+? why would it queue? one sentence
+= ALTER TABLE waits for every running transaction on the table to finish,
+  and while it waits, every new query on that table queues behind it.
+? and how long should lock_timeout be?
+```
+
+Setup:
+
+```elisp
+(use-package jot-ask
+  :bind ("C-c a" . jot-ask))
+```
+
+| Key | Where | Does |
+|---|---|---|
+| `C-c a` (suggested) | anywhere | Pop up with the line or region quoted and a `? ` line ready |
+| `C-u C-c a` | anywhere | The same, asking in the other mode |
+| `C-c C-a` | in the notepad | Send the note being written as a question |
+| `C-c C-p` | in the notepad | Switch the next question between quick and project |
+| `C-c C-d` | in the notepad | Choose the project directory for the buffer being read |
+
+The notepad's top line always shows the mode and these keys. Nothing waits on
+the answer: close the notepad and keep reading, and the answer is written in
+when it arrives.
+
+### Quick and project questions
+
+| | Quick | Project |
+|---|---|---|
+| Asked from | a clean folder, `~/.emacs.d/jot-ask/` | the project of the buffer being read |
+| Knows | the quote and your question | that project's `CLAUDE.md`, and can read its files |
+| Tools | none | read-only: `Read`, `Grep`, `Glob` |
+| Typical answer | 4–5 seconds | a few seconds more, longer if it reads files |
+
+`jot-ask-default-mode` picks the default. A question never reaches your MCP
+servers or connectors, and a project question can read the project but never
+run commands or change files.
+
+Your own `~/.claude/CLAUDE.md` still applies in both modes. That is usually
+what you want; an optional fully clean quick mode is tracked in
+[#1](https://github.com/AAlvz/jot/issues/1). A `CLAUDE.md` placed in the quick
+folder applies to quick questions only.
+
+In a terminal, "the project" comes from where the terminal's program is
+actually running, which the operating system knows: the shell at its prompt,
+or whatever runs in it, such as Claude Code. That works without any shell
+setup, follows `cd` and handles tmux. Over ssh, questions go out quick.
+`C-c C-d` overrides the guess.
+
+### What is sent
+
+Only the quote and what you typed in that entry. Never the screen, the rest of
+the notepad, or the output around the highlight. Terminal output can contain
+tokens or internal names, so look at what you quote before asking.
+
+### Options
+
+| Option | Default | |
+|---|---|---|
+| `jot-ask-default-mode` | `quick` | `quick` or `project` |
+| `jot-ask-model` | `nil` | A `claude --model` value; `nil` uses your usual model |
+| `jot-ask-instructions` | short plain-text answers | Sent with every question |
+| `jot-ask-quick-directory` | `~/.emacs.d/jot-ask/` | Where quick questions run |
+| `jot-ask-project-tools` | `Read,Grep,Glob` | What project questions may use |
+| `jot-ask-program` | `claude` | The Claude Code executable |
+| `jot-ask-command-function` | `jot-ask-claude-command` | Build the command for another CLI |
+| `jot-paste-answers` | `t` | `nil` leaves answers out of `C-c J` |
+| `jot-show-hints` | `t` | The key line at the top of the notepad |
+| `jot-question-prefix`, `jot-answer-prefix` | `"? "`, `"= "` | How questions and answers are marked |
+
+To use another command-line tool, set `jot-ask-command-function` to a function
+that takes the prompt, mode, session ID and whether it is a follow-up, and
+returns the command to run. Its standard output is the answer.
 
 ## Terminals
 

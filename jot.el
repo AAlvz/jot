@@ -66,6 +66,8 @@
 
 (declare-function vterm-send-string "ext:vterm" (string &optional paste-p))
 (declare-function vterm-copy-mode "ext:vterm" (&optional arg))
+(declare-function project-root "project" (project))
+(defvar vterm--process)
 (defvar vterm-copy-mode)
 
 (defgroup jot nil
@@ -130,6 +132,38 @@ around their output."
 A prefix argument to `jot-paste' inverts this for one call."
   :type 'boolean)
 
+(defcustom jot-question-prefix "? "
+  "String that starts a question line, see `jot-ask'."
+  :type 'string
+  :package-version '(jot . "0.3.0"))
+
+(defcustom jot-answer-prefix "= "
+  "String that starts an answer.  Its other lines are indented to match."
+  :type 'string
+  :package-version '(jot . "0.3.0"))
+
+(defcustom jot-paste-answers t
+  "Non-nil means `jot-paste' includes the answers from `jot-ask'.
+Nil pastes the notes and questions only."
+  :type 'boolean
+  :package-version '(jot . "0.3.0"))
+
+(defcustom jot-show-hints t
+  "Non-nil means the notepad shows its main keys on its top line.
+The line also shows whether `jot-ask' questions go out in quick or
+project mode."
+  :type 'boolean
+  :package-version '(jot . "0.3.0"))
+
+(defcustom jot-ask-default-mode 'quick
+  "Context that `jot-ask' questions start with.
+`quick' asks with no project context; `project' asks from the project
+of the buffer being read, so its instructions and files are known.
+\\<jot-mode-map>\\[jot-ask-toggle-mode] in the notepad switches it for one question."
+  :type '(choice (const :tag "Quick, no context" quick)
+                 (const :tag "From the project being read" project))
+  :package-version '(jot . "0.3.0"))
+
 (defcustom jot-quote-predicates (list #'jot--vterm-quotable-p)
   "Functions deciding whether the line at point is worth quoting.
 Each is called with no arguments in the buffer being read.  If any
@@ -152,10 +186,30 @@ it handled the paste.  When none does, the text is inserted at point."
 (defvar jot--pending nil
   "(START . TEXT) of the quote inserted on the last open, until written under.")
 
+(defvar jot--ask-mode nil
+  "Mode for the next `jot-ask' question: `quick' or `project'.")
+
+(defvar jot--ask-directory nil
+  "Project directory for `project' questions, worked out on demand.
+The symbol `unknown' until it is first needed after an open.")
+
+;; The asking side lives in jot-ask.el and loads on first use.  Declared
+;; here so the keys work however jot was installed, autoloads or not.
+(autoload 'jot-ask "jot-ask"
+  "Pop the notepad up with the line or region quoted, ready for a question." t)
+(autoload 'jot-ask-send "jot-ask"
+  "Send the question being written in the notepad." t)
+
 (defvar-keymap jot-mode-map
   :doc "Keymap for `jot-mode'."
   "C-c C-c" #'jot-hide
-  "C-c C-k" #'jot-hide)
+  "C-c C-k" #'jot-hide
+  "C-c C-a" #'jot-ask-send
+  "C-c C-p" #'jot-ask-toggle-mode
+  "C-c C-d" #'jot-set-directory)
+
+;; Of the two ways to close, show the one most notepads use.
+(put 'jot-hide :advertised-binding (kbd "C-c C-c"))
 
 (define-minor-mode jot-mode
   "Minor mode for the jot notepad buffer.
@@ -168,7 +222,8 @@ it handled the paste.  When none does, the text is inserted at point."
     (setq-local word-wrap t)
     (let ((table (make-display-table)))
       (set-display-table-slot table 'wrap ?\s)
-      (setq-local buffer-display-table table))))
+      (setq-local buffer-display-table table))
+    (setq-local header-line-format '(:eval (jot--header-line)))))
 
 ;;;; Terminal integration
 
@@ -222,6 +277,166 @@ is active."
     (when (buffer-modified-p)
       (let ((save-silently t))
         (save-buffer)))))
+
+;;;; Questions and context
+
+(defun jot--header-line ()
+  "Return the notepad's top line: the question mode and the main keys."
+  (when jot-show-hints
+    (let ((close (or (where-is-internal #'jot-toggle nil t)
+                     (where-is-internal #'jot-hide jot-mode-map t))))
+      (concat
+       " " (propertize (jot--ask-mode-label) 'face 'bold) "  "
+       (propertize
+        (substitute-command-keys
+         (concat "\\<jot-mode-map>\\[jot-ask-send] ask · "
+                 "\\[jot-ask-toggle-mode] mode · "
+                 (key-description close) " close"))
+        'face 'shadow)))))
+
+(defun jot--ask-mode-label ()
+  "Return a label for the question mode, naming the project if any."
+  (if (eq (jot--ask-mode) 'project)
+      (let ((dir (jot--ask-directory)))
+        (format "[project: %s]"
+                (if dir
+                    (file-name-nondirectory (directory-file-name dir))
+                  "none, asks quick")))
+    "[quick]"))
+
+(defun jot--ask-mode ()
+  "Return the mode for the next question."
+  (or jot--ask-mode jot-ask-default-mode))
+
+(defun jot-ask-toggle-mode ()
+  "Switch the next question between quick and project mode."
+  (interactive)
+  (setq jot--ask-mode (if (eq (jot--ask-mode) 'project) 'quick 'project))
+  (force-mode-line-update)
+  (message "Jot: next question asks %s" (jot--ask-mode-label)))
+
+(defun jot--ask-directory ()
+  "Return the project directory of the buffer being read, or nil.
+Worked out once per open, since for a terminal it can mean asking the
+operating system."
+  (when (eq jot--ask-directory 'unknown)
+    (setq jot--ask-directory
+          (when-let* ((win jot--return-window)
+                      ((window-live-p win))
+                      (dir (jot--source-directory (window-buffer win))))
+            (if-let* (((require 'project nil t))
+                      (project (project-current nil dir)))
+                (expand-file-name (project-root project))
+              dir))))
+  jot--ask-directory)
+
+(defvar-local jot-directory nil
+  "Directory `project' questions about this buffer are asked from.
+Set with `jot-set-directory'; when nil, jot works it out.")
+
+(defvar jot-source-directory-functions (list #'jot--vterm-directory)
+  "Functions that find the directory a special buffer is really in.
+Each is called with the buffer and returns a directory, the symbol
+`remote' when the buffer is about another machine, or nil to let the
+next one try.  When none answers, the buffer's `default-directory' is
+used.  Terminals need this: their `default-directory' is often only
+where they were started.")
+
+(defun jot--source-directory (buf)
+  "Return the directory BUF is in, for `project' questions, or nil."
+  (let ((dir (or (buffer-local-value 'jot-directory buf)
+                 (run-hook-with-args-until-success
+                  'jot-source-directory-functions buf)
+                 (buffer-local-value 'default-directory buf))))
+    ;; A remote directory cannot be a working directory for a local
+    ;; command, so such questions go out quick instead.
+    (when (and (stringp dir) (not (file-remote-p dir)) (file-directory-p dir))
+      (file-name-as-directory (expand-file-name dir)))))
+
+(defun jot-set-directory (dir)
+  "Ask `project' questions about the buffer being read from DIR.
+In the notepad, this sets it for the buffer the notepad was opened from.
+With an empty answer, go back to working it out."
+  (interactive
+   (list (read-directory-name "Ask project questions from: " nil nil t)))
+  (let ((buf (if (and (eq (current-buffer) (jot--buffer))
+                      (window-live-p jot--return-window))
+                 (window-buffer jot--return-window)
+               (current-buffer))))
+    (with-current-buffer buf
+      (setq jot-directory (and (not (string-empty-p dir)) dir)))
+    (setq jot--ask-directory 'unknown)
+    (force-mode-line-update t)
+    (message "Jot: project questions about %s ask from %s"
+             (buffer-name buf) (or (jot--ask-directory) "nowhere, quick"))))
+
+;; vterm's `default-directory' only follows `cd' when the shell reports it,
+;; so ask the operating system where the terminal's foreground program
+;; runs.  That also catches programs that change directory on their own.
+
+(defun jot--pid-directory (pid)
+  "Return the working directory of process PID, or nil."
+  (let ((proc-link (format "/proc/%d/cwd" pid)))
+    (cond ((file-exists-p proc-link)        ; Linux, WSL
+           (ignore-errors (file-truename proc-link)))
+          ((executable-find "lsof")         ; macOS, BSD
+           (with-temp-buffer
+             (when (eq 0 (call-process "lsof" nil t nil "-a" "-p"
+                                       (number-to-string pid) "-d" "cwd" "-Fn"))
+               (goto-char (point-min))
+               (when (re-search-forward "^n\\(/.*\\)$" nil t)
+                 (match-string 1))))))))
+
+(defun jot--vterm-directory (buf)
+  "Return the directory of the program in vterm BUF, `remote', or nil.
+That is the foreground program's working directory: a shell at its
+prompt, or whatever runs in it, such as Claude Code.  Inside tmux it is
+the active pane's directory, and over ssh it is `remote'."
+  (when-let* (((eq (buffer-local-value 'major-mode buf) 'vterm-mode))
+              (proc (buffer-local-value 'vterm--process buf))
+              ((process-live-p proc))
+              (pid (alist-get 'tpgid (process-attributes (process-id proc)))))
+    (let* ((args (alist-get 'args (process-attributes pid)))
+           (program (and args (file-name-nondirectory
+                               (car (split-string args))))))
+      (cond ((member program '("ssh" "mosh" "mosh-client" "et")) 'remote)
+            ((and (equal program "tmux") (executable-find "tmux"))
+             (let ((dir (string-trim
+                         (with-output-to-string
+                           (call-process "tmux" nil standard-output nil
+                                         "display-message" "-p" "-c"
+                                         (process-tty-name proc)
+                                         "#{pane_current_path}")))))
+               (and (not (string-empty-p dir)) dir)))
+            (t (jot--pid-directory pid))))))
+
+(defun jot--entry-bounds ()
+  "Return (START . END) of the notepad entry around point.
+Entries are separated by blank lines."
+  (save-excursion
+    (let* ((start (progn (if (re-search-backward "\n[ \t]*\n" nil t)
+                            (match-end 0)
+                          (point-min))))
+           (end (progn (goto-char start)
+                      (if (re-search-forward "\n[ \t]*\n" nil t)
+                          (match-beginning 0)
+                        (point-max)))))
+      (cons start end))))
+
+(defun jot--strip-answers (text)
+  "Return TEXT without the answers `jot-ask' wrote into it."
+  (let ((indent (make-string (length jot-answer-prefix) ?\s)))
+    (with-temp-buffer
+      (insert text)
+      (goto-char (point-min))
+      (while (re-search-forward (concat "^" (regexp-quote jot-answer-prefix)) nil t)
+        (let ((start (line-beginning-position)))
+          (forward-line 1)
+          (while (and (not (eobp))
+                      (looking-at (concat (regexp-quote indent) "\\S-")))
+            (forward-line 1))
+          (delete-region start (point))))
+      (buffer-string))))
 
 ;;;; Display
 
@@ -322,28 +537,39 @@ With the region active, quote the region instead.  With a prefix
 argument NO-QUOTE, open the notepad without quoting anything.
 Where it appears is set by `jot-display'."
   (interactive "P")
-  (let ((buf (jot--buffer)))
-    (if (eq (window-buffer) buf)
-        (jot-hide)
-      (let* ((quoted (unless no-quote (jot--quote)))
-             (popup (jot--popup-p))
-             (win (progn
-                    (when (use-region-p) (deactivate-mark))
-                    (setq jot--return-window (selected-window))
-                    (if popup (jot--show-popup buf) (jot--show-side buf)))))
-        ;; Normalise the tail so repeated toggles never pile up blank lines.
-        (goto-char (point-max))
-        (skip-chars-backward " \t\n")
-        (delete-region (point) (point-max))
-        (let ((start (point)))
-          (unless (bobp) (insert (if quoted "\n\n" "\n")))
-          ;; A pop-up opens on the newest note; earlier ones are a scroll
-          ;; or a search away.
-          (when popup
-            (set-window-start win (line-beginning-position)))
-          (when quoted (insert quoted "\n"))
-          (setq jot--pending
-                (and quoted (cons start (buffer-substring start (point))))))))))
+  (if (eq (window-buffer) (jot--buffer))
+      (jot-hide)
+    (jot--open no-quote)))
+
+(defun jot--open (&optional no-quote suffix)
+  "Pop the notepad up as `jot-toggle' does, then insert SUFFIX if given.
+With NO-QUOTE, quote nothing.  Return the notepad's window."
+  (let* ((buf (jot--buffer))
+         (quoted (unless no-quote (jot--quote)))
+         (popup (jot--popup-p))
+         (win (progn
+                (when (use-region-p) (deactivate-mark))
+                (setq jot--return-window (selected-window)
+                      jot--ask-mode nil
+                      jot--ask-directory 'unknown)
+                (if popup (jot--show-popup buf) (jot--show-side buf)))))
+    ;; Normalise the tail so repeated toggles never pile up blank lines.
+    (goto-char (point-max))
+    (skip-chars-backward " \t\n")
+    (delete-region (point) (point-max))
+    (let ((start (point)))
+      ;; A quote or a question starts a new entry; a bare reopen does not.
+      (unless (bobp) (insert (if (or quoted suffix) "\n\n" "\n")))
+      ;; A pop-up opens on the newest note; earlier ones are a scroll or a
+      ;; search away.
+      (when popup
+        (set-window-start win (line-beginning-position)))
+      (when quoted (insert quoted "\n"))
+      (when suffix (insert suffix))
+      (setq jot--pending
+            (and (or quoted suffix)
+                 (cons start (buffer-substring start (point))))))
+    win))
 
 ;;;###autoload
 (defun jot-hide ()
@@ -358,7 +584,14 @@ Where it appears is set by `jot-display'."
          (when (and (<= start (point-max))
                     (equal (buffer-substring start (point-max)) text))
            (delete-region start (point-max)))))
-      (setq jot--pending nil))
+      (setq jot--pending nil)
+      ;; Nor an empty question line, such as the one an answer leaves ready.
+      (save-excursion
+        (goto-char (point-max))
+        (skip-chars-backward " \t\n")
+        (when (looking-back (concat "^" (regexp-quote (string-trim-right jot-question-prefix)))
+                            (line-beginning-position))
+          (delete-region (line-beginning-position) (point-max)))))
     (jot--save buf)
     (jot--close-windows buf)
     (when (window-live-p jot--return-window)
@@ -373,8 +606,10 @@ The text is also put on the kill ring.  With a prefix argument ARG, do
 the opposite of `jot-clear-after-paste' for this call."
   (interactive "P")
   (let* ((buf (jot--buffer))
-         (text (string-trim (with-current-buffer buf
-                              (buffer-substring-no-properties (point-min) (point-max)))))
+         (text (string-trim
+                (funcall (if jot-paste-answers #'identity #'jot--strip-answers)
+                         (with-current-buffer buf
+                           (buffer-substring-no-properties (point-min) (point-max))))))
          (clear (if arg (not jot-clear-after-paste) jot-clear-after-paste)))
     (when (string-empty-p text)
       (user-error "Jot is empty"))

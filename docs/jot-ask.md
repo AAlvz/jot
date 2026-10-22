@@ -62,6 +62,7 @@ turned off with `jot-show-hints`.
 | `C-u C-c a` | anywhere | the same, in the other mode for this question |
 | `C-c C-a` | in the notepad | send the current note or follow-up as a question |
 | `C-c C-p` | in the notepad | switch this question between quick and project |
+| `C-c C-d` | in the notepad | choose the project directory for the buffer being read |
 | `C-c j`, `C-c C-c`, `C-c J` | | unchanged: close, close, paste |
 
 `C-c C-c` keeps meaning "close", as it does today, so existing habits still
@@ -98,16 +99,39 @@ from `jot-ask-instructions`. The default is roughly:
 The clean folder starts empty. Put a `CLAUDE.md` in it for extra
 quick-mode-only behavior.
 
+**"Clean" means no project, not no configuration.** Claude Code also loads
+the user's own `~/.claude/CLAUDE.md`, hooks and MCP servers in every folder,
+so quick mode carries them too. That is deliberate for now: they are usually
+instructions the user wrote so that every Claude session behaves their way.
+An optional, truly clean quick mode is tracked in
+[issue #1](https://github.com/AAlvz/jot/issues/1).
+
 ### Finding "the project"
 
-jot asks Emacs for the project of the buffer being read (`project-current`,
-the same lookup `C-x p` uses), falling back to that buffer's directory.
+For a terminal, the buffer's `default-directory` is not enough: vterm only
+updates it when the shell reports each `cd`, and without that setup it stays
+wherever the vterm was opened. Measured on a real session, a vterm believed it
+was in one repo while the Claude Code inside it ran in another.
 
-In a vterm, Emacs only knows the shell's *current* directory if the shell
-reports it on every `cd`. Otherwise `default-directory` stays where the vterm
-started. vterm documents a few shell lines for this ("directory tracking"), so
-dot_files' `.shell_common` should get them. The popup showing the project name
-is the safety net.
+So jot asks the operating system instead, in this order:
+
+1. **An explicit choice.** `jot-set-directory` (`C-c C-d` in the notepad) sets
+   the directory for the buffer being read, and it always wins.
+2. **The terminal's foreground program.** The vterm's pty knows its foreground
+   process: the shell at a prompt, or whatever runs in it, such as Claude Code.
+   Its working directory comes from `/proc/<pid>/cwd` on Linux and WSL, or
+   `lsof` on macOS (a few milliseconds). This also catches programs that
+   change directory on their own.
+   - Inside **tmux**, the foreground program is the tmux client, so jot asks
+     tmux for the active pane's directory instead.
+   - Over **ssh** (or mosh), the directory is on another machine, so the
+     question goes out quick.
+3. **The buffer's `default-directory`**, for everything else.
+
+The directory then goes to `project-current`, the same lookup `C-x p` uses, to
+find the project root. With no project, the directory itself is used. A
+remote directory always asks quick. The popup's top line names the project,
+so a wrong guess is visible before anything is sent.
 
 ## Conversations
 
