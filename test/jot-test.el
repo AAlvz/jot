@@ -170,6 +170,19 @@ Whether a final newline is written depends on `require-final-newline'."
       (jot-toggle)
       (should (equal (jot-test--contents) "> first important line\nfallback")))))
 
+(ert-deftest jot-test-disabled-modes ()
+  "Modes listed in `jot-disabled-modes' are off in the notepad only."
+  (jot-test--with-env
+    (require 'display-line-numbers)
+    (let ((text-mode-hook (list #'display-line-numbers-mode))
+          (auto-mode-alist (cons '("\\.md\\'" . text-mode) auto-mode-alist)))
+      (with-current-buffer (jot--buffer)
+        (should (derived-mode-p 'text-mode))
+        (should-not display-line-numbers-mode))
+      (with-temp-buffer
+        (text-mode)
+        (should display-line-numbers-mode)))))
+
 (ert-deftest jot-test-vterm ()
   "Quote from copy mode, then paste into the shell as one block."
   (skip-unless (and (not jot-test-skip-vterm)

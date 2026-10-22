@@ -138,6 +138,14 @@ A different color from note taking, so it is clear the note goes out."
   "Face for the pop-up while asking a `project' question."
   :package-version '(jot . "0.3.0"))
 
+(defcustom jot-disabled-modes '(display-line-numbers-mode whitespace-mode)
+  "Minor modes turned off in the notepad, whatever turned them on.
+Line numbers take room a small pop-up does not have, and the notepad
+keeps each note and answer on one long line that it wraps for display,
+which `whitespace-mode' would flag as too long."
+  :type '(repeat function)
+  :package-version '(jot . "0.3.0"))
+
 (defcustom jot-quote-prefix "> "
   "String put in front of each quoted line."
   :type 'string)
@@ -243,6 +251,9 @@ The symbol `unknown' until it is first needed after an open.")
   ;; Quotes are often longer than the pop-up is wide: wrap them at word
   ;; boundaries, without the backslash a terminal puts at each wrap.
   (when jot-mode
+    (dolist (mode jot-disabled-modes)
+      (when (and (fboundp mode) (boundp mode) (symbol-value mode))
+        (funcall mode -1)))
     (setq-local word-wrap t)
     (let ((table (make-display-table)))
       (set-display-table-slot table 'wrap ?\s)
