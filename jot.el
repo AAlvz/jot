@@ -138,11 +138,14 @@ A different color from note taking, so it is clear the note goes out."
   "Face for the pop-up while asking a `project' question."
   :package-version '(jot . "0.3.0"))
 
-(defcustom jot-disabled-modes '(display-line-numbers-mode whitespace-mode)
+(defcustom jot-disabled-modes
+  '(display-line-numbers-mode whitespace-mode company-mode corfu-mode)
   "Minor modes turned off in the notepad, whatever turned them on.
 Line numbers take room a small pop-up does not have, and the notepad
 keeps each note and answer on one long line that it wraps for display,
-which `whitespace-mode' would flag as too long."
+which `whitespace-mode' would flag as too long.  Completion pop-ups
+have nothing to offer in a note, and an idle one showing in a terminal
+kept an arriving answer from being drawn until the next key."
   :type '(repeat function)
   :package-version '(jot . "0.3.0"))
 

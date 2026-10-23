@@ -101,6 +101,7 @@ Everything is available through `M-x customize-group RET jot`.
 | `jot-window-side` | `bottom` | Side window position: `bottom`, `top`, `left`, `right` |
 | `jot-window-size` | `0.3` | Side window size: a fraction of the frame, or lines/columns |
 | `jot-file` | `~/.emacs.d/jot.md` | Where the notes live |
+| `jot-disabled-modes` | line numbers, whitespace, company, corfu | Minor modes turned off in the notepad |
 | `jot-quote-prefix` | `"> "` | Put before each quoted line |
 | `jot-trim-regexp` | whitespace and `│┃║` | Trimmed from both ends of quoted lines |
 | `jot-clear-after-paste` | `t` | Empty the notepad after pasting; `C-u` inverts it once |

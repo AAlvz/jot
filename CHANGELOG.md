@@ -22,6 +22,9 @@ All notable changes to jot. Versions follow [semver](https://semver.org).
   (`jot-ask-expected-seconds`); `jot-ask-timeout` gives up on a lost answer.
 - The pop-up is colored by what it is doing: `jot-popup` for notes,
   `jot-popup-ask` for quick questions, `jot-popup-ask-project` for project ones.
+- `jot-disabled-modes` turns off line numbers, `whitespace-mode` and
+  completion (company, corfu) in the notepad. An idle completion pop-up in a
+  terminal kept an arriving answer from showing until the next key.
 - The pop-up grows to show a whole answer, up to `jot-popup-max-height` and
   never past the window it opens over, and shows it from the question down.
 
