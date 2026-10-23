@@ -178,8 +178,12 @@
     (let ((line (jot--header-line)))
       (should (string-match-p "\\[quick\\]" line))
       (should (string-match-p "C-c C-a ask" line))
-      (should (string-match-p "C-c C-p mode" line))
+      (should (string-match-p "C-c C-p project" line))
       (should (string-match-p "C-c C-c close" line)))
+    (jot-ask-toggle-mode)
+    (let ((line (jot--header-line)))
+      (should (string-match-p "\\[project: " line))
+      (should (string-match-p "C-c C-p quick" line)))
     (jot-toggle)))
 
 (ert-deftest jot-ask-test-claude-command-shape ()

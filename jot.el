@@ -328,7 +328,9 @@ is active."
        (propertize
         (substitute-command-keys
          (concat "\\<jot-mode-map>\\[jot-ask-send] ask · "
-                 "\\[jot-ask-toggle-mode] mode · "
+                 ;; Name where the key goes, not just that it switches.
+                 "\\[jot-ask-toggle-mode] "
+                 (if (eq (jot--ask-mode) 'project) "quick" "project") " · "
                  (key-description close) " close"))
         'face 'shadow)))))
 

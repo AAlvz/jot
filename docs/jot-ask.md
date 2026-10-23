@@ -13,7 +13,7 @@ in the same place.
 ```
   b. Move the migration to a pre-deploy hook with lock_timeout
      set, so it fails fast and retries instead of hanging.
-   ┌ [quick]  C-c C-a ask · C-c C-p mode · C-c j close ───┐
+   ┌ [quick]  C-c C-a ask · C-c C-p project · C-c j close ┐
    │ > b. Move the migration to a pre-deploy hook with    │
    │   lock_timeout set, so it fails fast and retries     │
    │ ? what's a sane lock_timeout for a 40GB table?       │
@@ -49,11 +49,12 @@ The popup's top line shows the mode and the few keys that matter, so nothing
 has to be memorized:
 
 ```
-[quick]  C-c C-a ask · C-c C-p mode · C-c j close
-[project: tribu]  C-c C-a ask · C-c C-p mode · C-c j close
+[quick]  C-c C-a ask · C-c C-p project · C-c j close
+[project: tribu]  C-c C-a ask · C-c C-p quick · C-c j close
 ```
 
-Only the everyday keys and toggles go there. Everything deeper (model,
+The toggle names where it goes: `project` while quick, `quick` while in a
+project. Only the everyday keys and toggles go there. Everything deeper (model,
 command, instructions) is ordinary package configuration. The hint line can be
 turned off with `jot-show-hints`.
 
