@@ -2,14 +2,15 @@
 
 All notable changes to jot. Versions follow [semver](https://semver.org).
 
-## Unreleased
+## 0.3.0 — 2026-10-23
 
 ### Added
 
 - **jot-ask**: send a note as a question to Claude Code (`claude -p`), with
   the answer written into the notepad. A follow-up is sent with the entry's
-  quote and earlier questions and answers, so it continues the conversation. `jot-ask` asks straight from a highlight; `C-c C-a` sends the
-  note being written.
+  quote and earlier questions and answers, so it continues the conversation.
+  `jot-ask` asks straight from a highlight; `C-c C-a` sends the note being
+  written.
 - Quick and project questions. Quick ones run from a clean folder with no
   tools; project ones run from the project of the buffer being read and may
   only read files. Neither can reach MCP servers.
@@ -27,6 +28,12 @@ All notable changes to jot. Versions follow [semver](https://semver.org).
   terminal kept an arriving answer from showing until the next key.
 - The pop-up grows to show a whole answer, up to `jot-popup-max-height` and
   never past the window it opens over, and shows it from the question down.
+- The notepad wraps long lines without the terminal's `\` at each wrap.
+
+### Fixed
+
+- Opening the notepad from inside the pop-up no longer fails with a dead
+  frame error.
 
 ## 0.2.1 — 2026-10-22
 

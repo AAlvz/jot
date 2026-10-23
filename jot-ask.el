@@ -55,7 +55,8 @@
 (defgroup jot-ask nil
   "Ask quick questions from the jot notepad."
   :group 'jot
-  :prefix "jot-ask-")
+  :prefix "jot-ask-"
+  :package-version '(jot . "0.3.0"))
 
 (defcustom jot-ask-program "claude"
   "The Claude Code executable used by `jot-ask-claude-command'."
