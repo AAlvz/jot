@@ -1,18 +1,18 @@
 # Records the README GIF:  vhs demo/demo.tape   (from the repo root)
-# Needs vhs, zsh, and vterm installed in ~/.emacs.d.  Everything on screen is
+# Needs vhs, zsh, vterm installed in ~/.emacs.d, and a logged-in `claude`.  Everything on screen is
 # made up: a throwaway Emacs (demo-init.el) and a zsh with a bare prompt.
 
 Output demo/jot.gif
 Set Shell "bash"
 Set FontSize 18
 Set Width 1100
-Set Height 700
+Set Height 760
 Set Padding 16
 Set Theme "Catppuccin Mocha"
 Set TypingSpeed 55ms
 
 Hide
-Type "TERM=xterm-256color COLORTERM=truecolor emacs -Q -nw -l demo/demo-init.el" Enter
+Type "env -u CLAUDECODE TERM=xterm-256color COLORTERM=truecolor emacs -Q -nw -l demo/demo-init.el" Enter
 Sleep 4s
 Show
 
@@ -62,7 +62,24 @@ Sleep 600ms
 Ctrl+C Ctrl+C
 Sleep 1500ms
 
-# C-c J: every note goes to the prompt as one paste, nothing is sent.
+# C-c a: ask Claude about a line.  The pop-up turns blue, counts down while
+# it waits, and the answer lands under the question.
+Ctrl+R
+Type "lock_timeout"
+Enter
+Sleep 600ms
+Ctrl+C
+Type "a"
+Sleep 1200ms
+Type "what's a sane lock_timeout here? one sentence"
+Sleep 800ms
+Ctrl+C Ctrl+A
+Sleep 9s
+Ctrl+C Ctrl+C
+Sleep 1500ms
+
+# C-c J: every note, question and answer goes to the prompt as one paste,
+# and nothing is sent.
 Ctrl+C
 Type "J"
 Sleep 4s

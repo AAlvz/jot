@@ -14,7 +14,7 @@ them all.
 It was built for terminals inside Emacs, and it works from **vterm's copy
 mode**: no toggling in and out of copy mode for every note.
 
-![jot demo: notes pop up under the line being read, quoting it, then every note is pasted at the prompt](demo/jot.gif)
+![jot demo: notes pop up under the line being read, quoting it; a question to Claude counts down and the answer lands in the notepad; then every note and answer is pasted at the prompt](demo/jot.gif)
 
 ## Contents
 

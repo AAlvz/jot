@@ -14,6 +14,7 @@
 (package-initialize)
 (add-to-list 'load-path (expand-file-name ".." jot-demo-dir))
 (require 'jot)
+(require 'jot-ask)
 (require 'vterm)
 
 (setq inhibit-startup-screen t
@@ -24,13 +25,25 @@
 
 (global-set-key (kbd "C-c j") #'jot-toggle)
 (global-set-key (kbd "C-c J") #'jot-paste)
+(global-set-key (kbd "C-c a") #'jot-ask)
+
+;; Real questions to Claude, but from a throwaway folder and without the
+;; recording user's own ~/.claude configuration, so the answer in a public
+;; GIF depends on nothing but the question.
+(setq jot-ask-quick-directory (make-temp-file "jot-demo-ask" t)
+      jot-ask-command-function
+      (lambda (prompt mode)
+        (let ((cmd (jot-ask-claude-command prompt mode)))
+          (append (butlast cmd 2) '("--setting-sources" "project,local")
+                  (last cmd 2)))))
 
 ;; A one-line keycast in the tab bar, so the GIF shows which key did what.
 (defvar jot-demo--keys "")
 
 (defun jot-demo--record ()
   "Remember the keys behind the jot and copy-mode commands just run."
-  (when (memq this-command '(jot-toggle jot-hide jot-paste vterm-copy-mode))
+  (when (memq this-command '(jot-toggle jot-hide jot-paste jot-ask jot-ask-send
+                                        vterm-copy-mode))
     (setq jot-demo--keys (format "  %s   %s  "
                                  (key-description (this-command-keys-vector))
                                  this-command))
