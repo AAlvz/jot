@@ -2,6 +2,14 @@
 
 All notable changes to jot. Versions follow [semver](https://semver.org).
 
+## 0.3.1 — 2026-10-23
+
+### Changed
+
+- The README's demo GIF now shows jot-ask: a question about a line, the
+  countdown while it waits, the answer landing in the notepad, and the final
+  paste carrying the answer along with the notes. No code changes.
+
 ## 0.3.0 — 2026-10-23
 
 ### Added

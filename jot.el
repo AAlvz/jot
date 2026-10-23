@@ -6,7 +6,7 @@
 ;; Maintainer: AAlvz <alfonso@alvz.mx>
 ;; Assisted-by: Claude Code:claude-opus-5-5
 ;; URL: https://github.com/AAlvz/jot
-;; Version: 0.3.0
+;; Version: 0.3.1
 ;; Package-Requires: ((emacs "29.1"))
 ;; Keywords: convenience, terminals, outlines
 
